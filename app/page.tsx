@@ -1,65 +1,266 @@
-import Image from "next/image";
+"use client";
+
+import { useState, useCallback } from "react";
+import Header from "@/components/Header";
+import InputPanel from "@/components/InputPanel";
+import ResultsPanel from "@/components/ResultsPanel";
+import BatchInputPanel from "@/components/BatchInputPanel";
+import BatchResultsPanel from "@/components/BatchResultsPanel";
+import {
+  AnalysisResult,
+  AppMode,
+  BatchAnalysisResponse,
+  BatchDocumentResult,
+  ImproveResult,
+  ParsedDocument,
+} from "@/lib/types";
 
 export default function Home() {
+  const [mode, setMode] = useState<AppMode>("single");
+
+  // Input text — lifted so it persists across tab switches
+  const [singleDocText, setSingleDocText] = useState("");
+  const [batchDocText, setBatchDocText] = useState("");
+
+  // Single mode state
+  const [singleLoading, setSingleLoading] = useState(false);
+  const [singleError, setSingleError] = useState<string | null>(null);
+  const [singleResult, setSingleResult] = useState<AnalysisResult | null>(null);
+
+  // Improve state
+  const [improveLoading, setImproveLoading] = useState(false);
+  const [improveError, setImproveError] = useState<string | null>(null);
+  const [improveResult, setImproveResult] = useState<ImproveResult | null>(null);
+
+  // Batch mode state
+  const [batchLoading, setBatchLoading] = useState(false);
+  const [batchError, setBatchError] = useState<string | null>(null);
+  const [batchResults, setBatchResults] = useState<BatchDocumentResult[] | null>(null);
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
+
+  function clearImproveState() {
+    setImproveResult(null);
+    setImproveError(null);
+  }
+
+  function switchMode(next: AppMode) {
+    if (next === mode) return;
+    setMode(next);
+    setSingleResult(null);
+    setSingleError(null);
+    clearImproveState();
+    setBatchResults(null);
+    setBatchError(null);
+    setBatchProgress(null);
+  }
+
+  const handleSingleAnalyze = useCallback(async (document: string) => {
+    setSingleError(null);
+    setSingleResult(null);
+    setImproveResult(null);
+    setImproveError(null);
+    setSingleLoading(true);
+
+    try {
+      const res = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ document }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setSingleError(data.error ?? `Request failed with status ${res.status}.`);
+        return;
+      }
+      setSingleResult(data as AnalysisResult);
+    } catch (err) {
+      setSingleError(
+        err instanceof Error ? err.message : "An unexpected error occurred."
+      );
+    } finally {
+      setSingleLoading(false);
+    }
+  }, []);
+
+  const handleSingleAnalyzeAgain = useCallback(() => {
+    setSingleResult(null);
+    setSingleError(null);
+    clearImproveState();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+
+  const handleImprove = useCallback(
+    async (docText: string, result: AnalysisResult) => {
+      setImproveLoading(true);
+      setImproveError(null);
+      setImproveResult(null);
+
+      const dimension_summaries = [
+        result.chunking_readiness.summary,
+        result.ambiguity_detection.summary,
+        result.internal_contradiction.summary,
+        result.staleness_signals.summary,
+        result.coverage_gaps.summary,
+      ];
+
+      try {
+        const res = await fetch("/api/improve", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            document: docText,
+            recommendations: result.top_recommendations,
+            dimension_summaries,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setImproveError(
+            data.error ?? `Improve request failed with status ${res.status}.`
+          );
+          return;
+        }
+        setImproveResult(data as ImproveResult);
+      } catch (err) {
+        setImproveError(
+          err instanceof Error ? err.message : "An unexpected error occurred."
+        );
+      } finally {
+        setImproveLoading(false);
+      }
+    },
+    []
+  );
+
+  const handleBatchAnalyze = useCallback(
+    async (
+      documents: ParsedDocument[],
+      _progressCallback: (n: number, total: number) => void
+    ) => {
+      setBatchError(null);
+      setBatchResults(null);
+      setBatchLoading(true);
+      setBatchProgress({ current: 0, total: documents.length });
+
+      try {
+        const res = await fetch("/api/analyze-batch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ documents }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setBatchError(data.error ?? `Request failed with status ${res.status}.`);
+          return;
+        }
+        const response = data as BatchAnalysisResponse;
+        setBatchResults(response.results);
+      } catch (err) {
+        setBatchError(
+          err instanceof Error ? err.message : "An unexpected error occurred."
+        );
+      } finally {
+        setBatchLoading(false);
+        setBatchProgress(null);
+      }
+    },
+    []
+  );
+
+  const handleBatchRunAnother = useCallback(() => {
+    setBatchResults(null);
+    setBatchError(null);
+    setBatchProgress(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+    <div className="page-wrapper">
+      <div className="content-container">
+        <Header />
+
+        <div className="mode-toggle">
+          <button
+            className={`mode-tab ${mode === "single" ? "mode-tab-active" : ""}`}
+            onClick={() => switchMode("single")}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+            SINGLE DOCUMENT
+          </button>
+          <button
+            className={`mode-tab ${mode === "batch" ? "mode-tab-active" : ""}`}
+            onClick={() => switchMode("batch")}
+          >
+            BATCH (UP TO 10 DOCS)
+          </button>
+        </div>
+
+        {mode === "single" && (
+          <>
+            <InputPanel
+              value={singleDocText}
+              onValueChange={setSingleDocText}
+              onAnalyze={handleSingleAnalyze}
+              isLoading={singleLoading}
+              error={singleError}
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+            {singleResult && (
+              <ResultsPanel
+                result={singleResult}
+                onAnalyzeAgain={handleSingleAnalyzeAgain}
+                onImprove={() => handleImprove(singleDocText, singleResult)}
+                improveResult={improveResult}
+                isImproving={improveLoading}
+                improveError={improveError}
+              />
+            )}
+          </>
+        )}
+
+        {mode === "batch" && (
+          <>
+            {!batchResults && (
+              <BatchInputPanel
+                value={batchDocText}
+                onValueChange={setBatchDocText}
+                onAnalyze={handleBatchAnalyze}
+                isLoading={batchLoading}
+                progress={batchProgress}
+                error={batchError}
+              />
+            )}
+            {batchResults && (
+              <BatchResultsPanel
+                results={batchResults}
+                onRunAnother={handleBatchRunAnother}
+              />
+            )}
+          </>
+        )}
+
+        <footer className="site-footer">
+          <div className="rule" />
+          <p className="footer-text">
+            Built as a learning project. Uses Claude API for analysis.{" "}
+            <a
+              href="#"
+              className="footer-link"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Source on GitHub
+            </a>
+            {" "}&middot;{" "}
+            <a
+              href="https://linkedin.com/in/akashsangami"
+              className="footer-link"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Akash Sangami
+            </a>
+          </p>
+        </footer>
+      </div>
     </div>
   );
 }

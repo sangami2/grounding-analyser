@@ -1,36 +1,73 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Grounding Quality Analyzer
 
-## Getting Started
+I built this tool to learn something specific: what makes a document a good or bad grounding source for an AI agent? I was curious about the RAG (retrieval-augmented generation) pipeline, and I wanted to understand the quality problem at the data layer, not just the model layer. This is the artifact of that investigation.
 
-First, run the development server:
+The problem it addresses: when organizations ingest documents into a vector database to ground an AI agent, they generally do not evaluate those documents for retrieval readiness before they go in. A document that is vague, self-contradictory, stale, or poorly structured for chunking will produce low-quality agent responses, and the cause is invisible at inference time. There is no obvious self-service way to diagnose a document before it is ingested.
+
+This tool takes a document -- a knowledge base article, policy doc, support macro, or any text intended for a retrieval layer -- and runs it through Claude with a structured analysis prompt. It returns a grounding quality score across five dimensions: chunking readiness, ambiguity, internal contradiction, staleness signals, and coverage gaps. Each dimension includes a score, a plain-language summary, and specific quoted evidence from the document. The tool also surfaces a retrieval risk rating and a short list of actionable recommendations.
+
+## Running locally
+
+**Prerequisites:** Node.js 18 or later, an Anthropic API key.
+
+1. Clone the repository and install dependencies:
+
+```bash
+git clone <repo-url>
+cd grounding-analyser
+npm install
+```
+
+2. Copy the example environment file and add your API key:
+
+```bash
+cp .env.example .env.local
+```
+
+Open `.env.local` and replace the placeholder with your actual Anthropic API key:
+
+```
+ANTHROPIC_API_KEY=sk-ant-your-actual-key-here
+```
+
+3. Start the development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+4. Open http://localhost:3000 in your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+The API key is used only in the server-side API route (`app/api/analyze/route.ts`). It is never sent to the browser.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Deploying to Vercel
 
-## Learn More
+1. Push the repository to GitHub (make sure `.env.local` is in `.gitignore` -- it is by default).
 
-To learn more about Next.js, take a look at the following resources:
+2. Go to vercel.com, create a new project, and import the GitHub repository.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+3. In the Vercel project settings, add an environment variable:
+   - Key: `ANTHROPIC_API_KEY`
+   - Value: your Anthropic API key
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+4. Deploy. Vercel will run `npm run build` automatically. The API route runs as a serverless function, so the key stays server-side.
 
-## Deploy on Vercel
+## Limitations
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+The scoring model is opinionated. The five dimensions and their weights reflect my own judgment about what matters for RAG retrieval quality -- they are not validated against Salesforce's internal benchmarks or any other production RAG system. Claude's analysis is not deterministic: the same document will produce slightly different scores across runs, even at temperature 0.3.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+This is not a Salesforce product and has no affiliation with Salesforce. It does not use any Salesforce internal data, systems, or APIs. The tool is a personal learning artifact.
+
+The 50,000-character document limit is a practical constraint to keep API costs and latency reasonable for a demo tool. Production RAG pipelines typically handle documents of arbitrary length through recursive chunking strategies this tool does not simulate.
+
+## Acknowledgment
+
+My understanding of the grounding quality problem was shaped in part by Chandrika Shankarnarayan's public writing and talks on data quality and AI readiness. I am grateful for that work being available.
+
+## Tech stack
+
+- Next.js 14 with App Router
+- TypeScript
+- Tailwind CSS
+- Anthropic TypeScript SDK
+- Deployed on Vercel
