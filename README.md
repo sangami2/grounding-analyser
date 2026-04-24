@@ -13,7 +13,7 @@ This tool takes a document -- a knowledge base article, policy doc, support macr
 1. Clone the repository and install dependencies:
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/sangami2/grounding-analyser
 cd grounding-analyser
 npm install
 ```
