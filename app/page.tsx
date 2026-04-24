@@ -242,7 +242,7 @@ export default function Home() {
           <p className="footer-text">
             Built as a learning project. Uses Claude API for analysis.{" "}
             <a
-              href="#"
+              href="https://github.com/sangami2/grounding-analyser"
               className="footer-link"
               target="_blank"
               rel="noopener noreferrer"
